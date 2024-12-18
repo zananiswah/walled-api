@@ -1,13 +1,55 @@
 const transactionRepository = require("../repositories/transactions.repository");
-const bcrypt = require('bcrypt');
-// const { generateAccessToken } = require("../utils/auth.util");
+const userRepository = require("../repositories/users.repository");
+const { NotFoundError, ValidationError } = require("../dto/customErrors");
 
-const getTransactionById = async (id) => {
-  let transaction = await transactionRepository.getTransactionById(id);
-  if (transaction.rows.length === 0) {
-    throw new Error("Transaction not found");
+const transfer = async (userId, recipientWalletId, amount, description) => {
+  const senderWallet = await userRepository.findWalletByUserId(userId);
+  if (!senderWallet) {
+    throw new NotFoundError("Wallet not found for the user");
   }
-  return transaction.rows[0];
+
+  const recipientWallet = await userRepository.findWalletById(
+    recipientWalletId
+  );
+  if (!recipientWallet) {
+    throw new NotFoundError("Recipient wallet not found");
+  }
+
+  if (senderWallet.balance < amount) {
+    throw new ValidationError("Insufficient balance");
+  }
+
+  const transaction = await transactionRepository.transfer({
+    senderWalletId: senderWallet.id,
+    recipientWalletId: recipientWallet.id,
+    amount,
+    description,
+  });
+
+  return transaction;
 };
 
-module.exports = { getTransactionById};
+const topUp = async (walletId, amount, description) => {
+  const wallet = await userRepository.findWalletByWalletId(walletId);
+  
+  if (!wallet) {
+    throw new NotFoundError("Wallet not found for the user");
+  }
+
+  const transaction = await transactionRepository.topUp({
+    walletId: wallet.id,
+    amount,
+    description,
+  });
+
+  return transaction;
+};
+
+const getAllTransactions = async (walletId) => {
+  const transactions = await transactionRepository.findAllTransactionsByWalletId(
+    walletId
+  );
+  return transactions;
+};
+
+module.exports = { transfer, topUp, getAllTransactions };
